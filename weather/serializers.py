@@ -4,11 +4,10 @@ from .models import WeatherRecord
 
 class WeatherRecordSerializer(serializers.ModelSerializer):
     """Serializer for WeatherRecord model."""
-    
     class Meta:
         model = WeatherRecord
         fields = [
-            'id', 'city', 'country', 'temperature', 'humidity', 
+            'id', 'city', 'country', 'temperature', 'humidity',
             'pressure', 'description', 'wind_speed', 'wind_direction',
             'recorded_at', 'api_source'
         ]
@@ -17,12 +16,10 @@ class WeatherRecordSerializer(serializers.ModelSerializer):
 
 class WeatherRecordCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating WeatherRecord."""
-    
     class Meta:
         model = WeatherRecord
         fields = [
-            'city', 'country', 'temperature', 'humidity', 
+            'city', 'country', 'temperature', 'humidity',
             'pressure', 'description', 'wind_speed', 'wind_direction',
             'api_source'
         ]
-
