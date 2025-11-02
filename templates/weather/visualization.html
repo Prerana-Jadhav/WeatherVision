@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Data Visualization</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        label {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        input, button {
+            padding: 10px 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+            align-self: flex-end;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+        
+        .chart-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 18px;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        @media (max-width: 768px) {
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .filters {
+                flex-direction: column;
+            }
+            
+            button {
+                align-self: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌤️ Weather Data Visualization</h1>
+        <p class="subtitle">Interactive charts and statistics from your weather database</p>
+        
+        <div class="filters">
+            <div class="filter-group">
+                <label for="cityFilter">City (optional):</label>
+                <input type="text" id="cityFilter" placeholder="e.g., London" value="{{ city }}">
+            </div>
+            <div class="filter-group">
+                <label for="daysFilter">Days to analyze:</label>
+                <input type="number" id="daysFilter" min="1" max="365" value="{{ days }}">
+            </div>
+            <button onclick="loadData()">Load Data</button>
+        </div>
+        
+        <div id="errorMessage" class="error" style="display: none;"></div>
+        
+        <div id="statsContainer" class="stats-grid" style="display: none;"></div>
+        
+        <div id="loading" class="loading">Loading data...</div>
+        <div id="chartsContainer" class="charts-container" style="display: none;">
+            <div class="chart-card">
+                <div class="chart-title">Temperature Over Time</div>
+                <canvas id="temperatureChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">Humidity Over Time</div>
+                <canvas id="humidityChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">Pressure Over Time</div>
+                <canvas id="pressureChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">Temperature Distribution</div>
+                <canvas id="tempDistributionChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = '/api/records/';
+        let charts = {};
+
+        async function loadData() {
+            const city = document.getElementById('cityFilter').value;
+            const days = document.getElementById('daysFilter').value;
+            const loadingEl = document.getElementById('loading');
+            const chartsContainer = document.getElementById('chartsContainer');
+            const statsContainer = document.getElementById('statsContainer');
+            const errorMessage = document.getElementById('errorMessage');
+            
+            // Show loading
+            loadingEl.style.display = 'block';
+            chartsContainer.style.display = 'none';
+            statsContainer.style.display = 'none';
+            errorMessage.style.display = 'none';
+            
+            try {
+                // Build query params
+                let url = API_BASE_URL;
+                const params = new URLSearchParams();
+                if (city) params.append('city', city);
+                if (days) params.append('days', days);
+                
+                // Fetch records
+                const recordsResponse = await fetch(url + '?' + params.toString());
+                if (!recordsResponse.ok) throw new Error('Failed to fetch records');
+                const records = await recordsResponse.json();
+                
+                if (records.results && records.results.length === 0) {
+                    throw new Error('No data found for the specified filters.');
+                }
+                
+                const recordsData = records.results || records;
+                
+                // Fetch statistics
+                const statsParams = new URLSearchParams();
+                if (city) statsParams.append('city', city);
+                if (days) statsParams.append('days', days);
+                
+                const statsResponse = await fetch(url + 'statistics/?' + statsParams.toString());
+                const stats = statsResponse.ok ? await statsResponse.json() : null;
+                
+                // Hide loading
+                loadingEl.style.display = 'none';
+                
+                if (recordsData.length === 0) {
+                    throw new Error('No data available for visualization.');
+                }
+                
+                // Show containers
+                chartsContainer.style.display = 'grid';
+                
+                // Display statistics
+                if (stats) {
+                    displayStats(stats);
+                    statsContainer.style.display = 'grid';
+                }
+                
+                // Update charts
+                updateCharts(recordsData);
+                
+            } catch (error) {
+                loadingEl.style.display = 'none';
+                errorMessage.textContent = 'Error: ' + error.message;
+                errorMessage.style.display = 'block';
+            }
+        }
+
+        function displayStats(stats) {
+            const statsContainer = document.getElementById('statsContainer');
+            statsContainer.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${stats.avg_temperature ? stats.avg_temperature.toFixed(1) : 'N/A'}°C</div>
+                    <div class="stat-label">Avg Temperature</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.max_temperature ? stats.max_temperature.toFixed(1) : 'N/A'}°C</div>
+                    <div class="stat-label">Max Temperature</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.min_temperature ? stats.min_temperature.toFixed(1) : 'N/A'}°C</div>
+                    <div class="stat-label">Min Temperature</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.avg_humidity ? stats.avg_humidity.toFixed(1) : 'N/A'}%</div>
+                    <div class="stat-label">Avg Humidity</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.total_records || 0}</div>
+                    <div class="stat-label">Total Records</div>
+                </div>
+            `;
+        }
+
+        function updateCharts(data) {
+            // Sort by date
+            data.sort((a, b) => new Date(a.recorded_at) - new Date(b.recorded_at));
+            
+            const labels = data.map(r => {
+                const date = new Date(r.recorded_at);
+                return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            });
+            
+            const temperatures = data.map(r => parseFloat(r.temperature));
+            const humidities = data.map(r => parseFloat(r.humidity));
+            const pressures = data.map(r => parseFloat(r.pressure));
+            
+            // Temperature Chart
+            updateChart('temperatureChart', labels, temperatures, 'Temperature (°C)', 'rgba(255, 99, 132, 0.8)', 'rgba(255, 99, 132, 1)');
+            
+            // Humidity Chart
+            updateChart('humidityChart', labels, humidities, 'Humidity (%)', 'rgba(54, 162, 235, 0.8)', 'rgba(54, 162, 235, 1)');
+            
+            // Pressure Chart
+            updateChart('pressureChart', labels, pressures, 'Pressure (hPa)', 'rgba(75, 192, 192, 0.8)', 'rgba(75, 192, 192, 1)');
+            
+            // Temperature Distribution (Histogram)
+            updateHistogram('tempDistributionChart', temperatures, 'Temperature (°C)', 'rgba(153, 102, 255, 0.8)', 'rgba(153, 102, 255, 1)');
+        }
+
+        function updateChart(canvasId, labels, data, label, backgroundColor, borderColor) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            
+            if (charts[canvasId]) {
+                charts[canvasId].destroy();
+            }
+            
+            charts[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: label,
+                        data: data,
+                        borderColor: borderColor,
+                        backgroundColor: backgroundColor,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateHistogram(canvasId, data, label, backgroundColor, borderColor) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            
+            // Calculate bins for histogram
+            const min = Math.min(...data);
+            const max = Math.max(...data);
+            const binCount = 10;
+            const binSize = (max - min) / binCount;
+            const bins = Array(binCount).fill(0);
+            const binLabels = [];
+            
+            for (let i = 0; i < binCount; i++) {
+                binLabels.push((min + i * binSize).toFixed(1) + ' - ' + (min + (i + 1) * binSize).toFixed(1));
+            }
+            
+            data.forEach(value => {
+                const binIndex = Math.min(Math.floor((value - min) / binSize), binCount - 1);
+                bins[binIndex]++;
+            });
+            
+            if (charts[canvasId]) {
+                charts[canvasId].destroy();
+            }
+            
+            charts[canvasId] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: binLabels,
+                    datasets: [{
+                        label: label,
+                        data: bins,
+                        backgroundColor: backgroundColor,
+                        borderColor: borderColor,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load data on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadData();
+        });
+    </script>
+</body>
+</html>
+

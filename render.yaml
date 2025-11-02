@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: weathervision
+    env: python
+    buildCommand: pip install -r requirements.txt && python manage.py migrate
+    startCommand: gunicorn weathervision.wsgi:application
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: DEBUG
+        value: False
+      - key: DATABASE_URL
+        fromDatabase:
+          name: weathervision-db
+          property: connectionString
+
